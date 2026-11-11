@@ -5,7 +5,7 @@ import notify
 enum ChargeStatus: Equatable {
     case charging(to: Int)
     case holding(at: Int)
-    case resting(at: Int, until: Int)
+    case resting(until: Int)
     case draining(to: Int)
     case usingBattery(to: Int)
     case heatPaused
@@ -73,7 +73,7 @@ final class ChargeController {
         let isCharging = state.isCharging && state.percent < limit
         if heatPauseLimit != nil, !isCharging { return .heatPaused }
         if restLimit != nil, let restFloor, !isCharging, state.percent <= prefs.chargeLimit {
-            return .resting(at: state.percent, until: restFloor)
+            return state.percent > restFloor ? .resting(until: restFloor) : .charging(to: prefs.chargeLimit)
         }
         if isCharging { return .charging(to: limit) }
         if !state.isCharging, state.percent > limit { return .draining(to: limit) }

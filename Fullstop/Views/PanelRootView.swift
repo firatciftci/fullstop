@@ -163,7 +163,7 @@ struct PanelRootView: View {
 
     private var detail: String? {
         switch charge.status {
-        case let .resting(_, floor): return L.restingDetail(floor.percentText)
+        case let .resting(floor): return L.restingDetail(floor.percentText)
         case .calibrating: return L.calibratingDetail
         case .heatPaused: return L.heatResumes(Double(prefs.heatThreshold - ChargeController.heatHysteresis).temperatureText)
         default: break

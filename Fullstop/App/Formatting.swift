@@ -36,7 +36,7 @@ extension ChargeStatus {
         switch self {
         case let .charging(limit): limit >= Preferences.limitRange.upperBound ? L.statusChargingToFull : L.statusCharging(limit.percentText)
         case let .holding(limit): L.statusHolding(limit.percentText)
-        case let .resting(level, _): L.statusResting(level.percentText)
+        case .resting: L.statusResting
         case let .draining(limit): L.statusDraining(limit.percentText)
         case let .usingBattery(limit): L.statusUsingBattery(limit.percentText)
         case .heatPaused: L.statusHeatPaused

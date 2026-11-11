@@ -86,7 +86,7 @@ private struct SymbolRow: View {
         switch symbol {
         case .charging: (max(limit - 15, 10), .charging(to: limit))
         case .limit: (limit, .holding(at: limit))
-        case .resting: (max(limit - 4, 10), .resting(at: max(limit - 4, 10), until: max(limit - 10, 10)))
+        case .resting: (max(limit - 4, 10), .resting(until: max(limit - 10, 10)))
         case .usingBattery: (min(limit + 10, 100), .usingBattery(to: limit))
         case .cooling: (max(limit - 30, 10), .heatPaused)
         case .calibrating: (max(limit - 20, 10), .calibrating)

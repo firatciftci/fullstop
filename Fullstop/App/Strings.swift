@@ -9,7 +9,7 @@ enum L {
     static func statusHolding(_ limit: String) -> String { "Holding at \(limit)" }
     static func statusDraining(_ limit: String) -> String { "Using the battery down to \(limit)" }
     static func statusUsingBattery(_ limit: String) -> String { "Running on battery down to \(limit)" }
-    static func statusResting(_ limit: String) -> String { "Resting at \(limit)" }
+    static let statusResting = "Resting"
     static func restingDetail(_ limit: String) -> String { "Charges again at \(limit)" }
     static let statusOnBattery = "On battery"
     static let statusFull = "Fully charged"
