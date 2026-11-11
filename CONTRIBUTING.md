@@ -23,7 +23,7 @@ open Fullstop.xcodeproj
 The project has two targets:
 
 - Fullstop is the menu bar app. It sets limits from 80% to 100% through the charge limit built into macOS, without special permissions.
-- FullstopHelper is a small launch daemon that runs as root. The app installs it with `SMAppService` and talks to it over XPC. It does only three things: sets charge limits below 80%, connects or disconnects the power adapter, and sets the MagSafe light. It accepts connections only from the Fullstop app signed by the same team.
+- FullstopHelper is a small launch daemon that runs as root. The app installs it with `SMAppService` and talks to it over XPC. It does four things: sets charge limits below 80%, connects or disconnects the power adapter, sets the MagSafe light, and sets the Energy Mode. It accepts connections only from the Fullstop app signed by the same team.
 
 Code that both targets use lives in `Shared`. Keep the helper's surface as small as possible, and put every decision about what to do in the app.
 

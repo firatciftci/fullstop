@@ -12,4 +12,4 @@ Include the Fullstop and macOS versions, what you found, and the steps to reprod
 
 ## The helper
 
-Fullstop's helper runs as root, so we give issues in it priority. It accepts XPC connections only from the Fullstop app signed by the same team. It can only change the charge limit, connect or disconnect the power adapter, and set the MagSafe light. If you find a way to make it do anything else, or to reach it from another app, report it.
+Fullstop's helper runs as root, so we give issues in it priority. It accepts XPC connections only from the Fullstop app signed by the same team. It can only change the charge limit, connect or disconnect the power adapter, set the MagSafe light, and set the Energy Mode. If you find a way to make it do anything else, or to reach it from another app, report it.
