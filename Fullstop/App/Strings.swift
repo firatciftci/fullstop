@@ -90,7 +90,7 @@ enum L {
     static let restToggle = "Let the battery rest between charges"
     static let restLevel = "Charge again at"
     static let restFooter =
-        "Instead of topping up constantly, Fullstop holds the charge where it is and lets it drift down. When it reaches this level, it charges back to your limit."
+        "Instead of topping up every time the charge dips, Fullstop stops charging and holds the battery where it is. While plugged in, your Mac runs on the power adapter, so the charge falls slowly and can take days to reach this level. When it does, Fullstop charges back to your limit."
     static let magSafeLight = "MagSafe light"
     static let lightAutomatic = "Automatic"
     static let lightOff = "Off"
