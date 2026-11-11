@@ -48,7 +48,10 @@ let listener = try XPCListener(
             count -= 1
             return count
         }
-        if remaining == 0 { exit(0) }
+        guard remaining == 0 else { return }
+        DispatchQueue.main.async {
+            if clients.withLock({ $0 }) == 0 { exit(0) }
+        }
     }
 }
 
