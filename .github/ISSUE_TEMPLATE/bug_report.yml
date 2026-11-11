@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in Fullstop doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Describe what you saw and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Set the charge limit to 70%
+        2. Plug in the power adapter
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Fullstop version
+      description: Find it in Settings > About.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      description: For example, MacBook Pro (14-inch, M5 Pro). Find it in Apple menu > About This Mac.
+    validations:
+      required: true
+  - type: textarea
+    id: battery
+    attributes:
+      label: Battery and charger details
+      description: Optional. Include the battery percentage, whether the charger was connected, and the charger's wattage.
+  - type: textarea
+    id: screens
+    attributes:
+      label: Screenshots or recordings
+      description: Optional.

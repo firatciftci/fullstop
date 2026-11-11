@@ -1,0 +1,12 @@
+{
+  "caption": "Drag Fullstop to Applications to install",
+  "accent": "#2FB55D",
+  "glow": "#8BE6A6",
+  "arrow": "curve",
+  "width": 660,
+  "height": 400,
+  "iconSize": 128,
+  "app": [180, 160],
+  "applications": [480, 160],
+  "captionY": 296
+}

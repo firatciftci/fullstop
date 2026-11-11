@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: xcode-27
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+      IDENTITY: Developer ID Application
+    steps:
+      - name: Set paths
+        run: |
+          {
+            echo "KEYCHAIN=$RUNNER_TEMP/signing.keychain-db"
+            echo "ARCHIVE=$RUNNER_TEMP/Fullstop.xcarchive"
+            echo "APP=$RUNNER_TEMP/Fullstop.xcarchive/Products/Applications/Fullstop.app"
+            echo "DIST=$RUNNER_TEMP/dist"
+            echo "UPDATES=$RUNNER_TEMP/updates"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install tools
+        run: brew bundle
+
+      - name: Check that the tag matches the version
+        run: |
+          version=$(sed -nE 's/^ *MARKETING_VERSION: "?([^"]+)"?$/\1/p' project.yml)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::$TAG doesn't match MARKETING_VERSION $version in project.yml."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Format, lint, build, and analyze
+        run: tools/check.sh
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project Fullstop.xcodeproj \
+            -scheme Fullstop \
+            -configuration Release \
+            -destination generic/platform=macOS \
+            -archivePath "$ARCHIVE" \
+            -clonedSourcePackagesDirPath build/check/SourcePackages \
+            CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Import the signing certificate
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$password" "$KEYCHAIN"
+          base64 --decode <<< "$CERTIFICATE" > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$KEYCHAIN" > /dev/null
+          read -r -a keychains <<< "$(security list-keychains -d user | xargs)"
+          security list-keychains -d user -s "$KEYCHAIN" "${keychains[@]}"
+          rm "$RUNNER_TEMP/certificate.p12"
+
+      - name: Sign
+        run: |
+          sign() { codesign --force --timestamp --options runtime --keychain "$KEYCHAIN" --sign "$IDENTITY" "$@"; }
+          sparkle="$APP/Contents/Frameworks/Sparkle.framework"
+          sign "$sparkle/Versions/B/XPCServices/Installer.xpc"
+          sign --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+          sign "$sparkle/Versions/B/Autoupdate"
+          sign "$sparkle/Versions/B/Updater.app"
+          sign "$sparkle"
+          sign --identifier com.firatciftci.Fullstop.helper "$APP/Contents/MacOS/FullstopHelper"
+          sign "$APP"
+          codesign --verify --strict --deep --verbose=2 "$APP"
+
+      - name: Notarize the app
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Fullstop.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Fullstop.zip" --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
+
+      - name: Build and notarize the disk image
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          tools/dmg/make-dmg.sh "$APP" "$DIST/Fullstop.dmg"
+          codesign --timestamp --keychain "$KEYCHAIN" --sign "$IDENTITY" "$DIST/Fullstop.dmg"
+          xcrun notarytool submit "$DIST/Fullstop.dmg" --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          xcrun stapler staple "$DIST/Fullstop.dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DIST/Fullstop.dmg"
+          ditto -c -k --keepParent "$ARCHIVE/dSYMs/Fullstop.app.dSYM" "$DIST/Fullstop.app.dSYM.zip"
+          (cd "$DIST" && shasum -a 256 Fullstop.dmg > Fullstop.dmg.sha256)
+
+      - name: Build the update feed
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$UPDATES"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$UPDATES/Fullstop-$VERSION.zip"
+          if [ -f ".github/releases/$TAG.md" ]; then cp ".github/releases/$TAG.md" "$UPDATES/Fullstop-$VERSION.md"; fi
+          gh release download --repo "$REPO" --pattern appcast.xml --dir "$UPDATES" 2>/dev/null || true
+          build/check/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
+            --embed-release-notes \
+            --link "https://github.com/$REPO" \
+            --maximum-deltas 0 \
+            "$UPDATES" <<< "$SPARKLE_PRIVATE_KEY"
+          cp "$UPDATES/Fullstop-$VERSION.zip" "$UPDATES/appcast.xml" "$DIST/"
+
+      - name: Attest the build
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/dist/Fullstop.dmg
+            ${{ runner.temp }}/dist/Fullstop-*.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/releases/$TAG.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" --title "Fullstop $VERSION" --notes-file "$notes" --verify-tag
+          else
+            npx --yes changelogithub@15.0.5 || gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+          fi
+          gh release upload "$TAG" "$DIST/Fullstop.dmg" "$DIST/Fullstop.dmg.sha256" "$DIST/Fullstop-$VERSION.zip" "$DIST/appcast.xml" "$DIST/Fullstop.app.dSYM.zip" --clobber
+
+      - name: Clean up
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8"

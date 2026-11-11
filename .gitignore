@@ -1,0 +1,13 @@
+.DS_Store
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+/build/
+/DerivedData/
+/Fullstop.xcodeproj/
+/Fullstop/Info.plist
+/screenshots/
+/tools/icon/
+/research/
+/spike/
