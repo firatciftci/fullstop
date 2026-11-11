@@ -10,6 +10,7 @@ extension KeyboardShortcuts.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var quitting = false
+    private var replied = false
 
     func applicationDidFinishLaunching(_: Notification) {
         if let appearance = DemoData.appearance { NSApp.appearance = NSAppearance(named: appearance) }
@@ -36,15 +37,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !quitting else { return .terminateLater }
         quitting = true
         Task {
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { await ChargeController.shared.prepareToQuit() }
-                group.addTask { try? await Task.sleep(for: .seconds(5)) }
-                await group.next()
-                group.cancelAll()
-            }
-            NSApp.reply(toApplicationShouldTerminate: true)
+            await ChargeController.shared.prepareToQuit()
+            finishQuitting()
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            finishQuitting()
         }
         return .terminateLater
+    }
+
+    private func finishQuitting() {
+        guard !replied else { return }
+        replied = true
+        NSApp.reply(toApplicationShouldTerminate: true)
     }
 
     func application(_: NSApplication, open urls: Array<URL>) {

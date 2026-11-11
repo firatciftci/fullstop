@@ -54,6 +54,7 @@ enum L {
     static let helperBannerInstall = "Limits below 80% need the charging helper."
     static let helperBannerApprove = "Approve Fullstop in Login Items to finish installing the helper."
     static let helperRequired = "Install the charging helper to use this."
+    static let helperUnresponsive = "The charging helper isn't responding. In Settings, remove the helper and install it again."
     static let powerUIUnavailable = "This Mac doesn't support a charge limit."
     static func limitFailed(_ reason: String) -> String { "Couldn't set the charge limit. \(reason)" }
 

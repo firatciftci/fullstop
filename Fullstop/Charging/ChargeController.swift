@@ -340,6 +340,7 @@ final class ChargeController {
     private static func message(for error: any Error) -> String {
         switch error {
         case HelperError.notInstalled: L.helperRequired
+        case HelperError.unresponsive: L.helperUnresponsive
         case PowerUIError.unavailable: L.powerUIUnavailable
         case let HelperError.failed(reason), let PowerUIError.failed(reason): L.limitFailed(reason)
         default: L.limitFailed(error.localizedDescription)

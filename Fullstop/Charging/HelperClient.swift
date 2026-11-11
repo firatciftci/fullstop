@@ -4,7 +4,21 @@ import XPC
 
 enum HelperError: Error {
     case notInstalled
+    case unresponsive
     case failed(String)
+}
+
+private final class PendingReply {
+    private var continuation: CheckedContinuation<HelperReply, any Error>?
+
+    init(_ continuation: CheckedContinuation<HelperReply, any Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(with result: Result<HelperReply, any Error>) {
+        continuation?.resume(with: result)
+        continuation = nil
+    }
 }
 
 @Observable
@@ -18,6 +32,8 @@ final class HelperClient {
     @ObservationIgnored private let service = SMAppService.daemon(plistName: "\(HelperService.label).plist")
     @ObservationIgnored private var session: XPCSession?
     @ObservationIgnored private var generation = 0
+
+    private static let replyTimeout = Duration.seconds(10)
 
     private init() {
         status = DemoData.isEnabled ? .enabled : service.status
@@ -57,12 +73,17 @@ final class HelperClient {
         guard isReady else { throw HelperError.notInstalled }
         let session = try connect()
         let reply: HelperReply = try await withCheckedThrowingContinuation { continuation in
+            let pending = PendingReply(continuation)
             do {
                 try session.send(request) { (result: Result<HelperReply, any Error>) in
-                    continuation.resume(with: result)
+                    Task { @MainActor in pending.resume(with: result) }
                 }
             } catch {
-                continuation.resume(throwing: error)
+                pending.resume(with: .failure(error))
+            }
+            Task {
+                try? await Task.sleep(for: Self.replyTimeout)
+                pending.resume(with: .failure(HelperError.unresponsive))
             }
         }
         if let error = reply.error { throw HelperError.failed(error) }
