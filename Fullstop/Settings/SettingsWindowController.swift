@@ -3,6 +3,11 @@ import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
 
+private final class DemoWindow: NSWindow {
+    @objc func hasKeyAppearance() -> Bool { true }
+    @objc func hasMainAppearance() -> Bool { true }
+}
+
 private final class SettingsTabs: NSTabViewController {
     override func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
         super.tabView(tabView, didSelect: item)
@@ -23,6 +28,8 @@ final class SettingsWindowController: NSWindowController {
                     pane
                     .environment(Preferences.shared)
                     .environment(HelperClient.shared)
+                    .environment(BatteryMonitor.shared)
+                    .environment(ChargeController.shared)
                     .environment(Updater.shared)
                     .frame(width: 500)
                     .fixedSize(horizontal: false, vertical: true))
@@ -34,8 +41,10 @@ final class SettingsWindowController: NSWindowController {
             tabs.addTabViewItem(item)
         }
         add(L.tabGeneral, symbol: "gearshape", GeneralPane())
+        add(L.tabCharging, symbol: "bolt.batteryblock", ChargingPane())
+        add(L.tabAppearance, symbol: "menubar.rectangle", AppearancePane())
         add(L.tabAbout, symbol: "info.circle", AboutPane())
-        let window = NSWindow(contentViewController: tabs)
+        let window = DemoData.isEnabled ? DemoWindow(contentViewController: tabs) : NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
@@ -45,8 +54,11 @@ final class SettingsWindowController: NSWindowController {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { nil }
 
-    func show() {
+    func show(tab: Int? = nil) {
         guard let window else { return }
+        if let tab, let tabs = contentViewController as? NSTabViewController, tabs.tabViewItems.indices.contains(tab) {
+            tabs.selectedTabViewItemIndex = tab
+        }
         if !window.isVisible { window.center() }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
@@ -54,10 +66,11 @@ final class SettingsWindowController: NSWindowController {
 }
 
 private struct GeneralPane: View {
-    @Environment(HelperClient.self) private var helper
+    @Environment(Preferences.self) private var prefs
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
+        @Bindable var prefs = prefs
         Form {
             Section {
                 Toggle(L.launchAtLogin, isOn: $launchAtLogin)
@@ -71,24 +84,99 @@ private struct GeneralPane: View {
                     }
                 KeyboardShortcuts.Recorder(L.shortcut, name: .togglePanel)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct ChargingPane: View {
+    @Environment(Preferences.self) private var prefs
+    @Environment(HelperClient.self) private var helper
+    @Environment(BatteryMonitor.self) private var battery
+    @Environment(ChargeController.self) private var charge
+
+    @State private var draftLimit: Double?
+
+    var body: some View {
+        @Bindable var prefs = prefs
+        Form {
+            Section {
+                LabeledContent(L.chargeLimit) {
+                    HStack(spacing: 12) {
+                        Slider(
+                            value: limitBinding,
+                            in: Double(Preferences.limitRange.lowerBound)...Double(Preferences.limitRange.upperBound),
+                            step: Double(Preferences.limitStep)
+                        ) {
+                            Text(L.chargeLimit)
+                        } onEditingChanged: { editing in
+                            guard !editing, let draftLimit else { return }
+                            charge.setLimit(Int(draftLimit))
+                            self.draftLimit = nil
+                        }
+                        .labelsHidden()
+                        Text(limitText)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 40, alignment: .trailing)
+                    }
+                    .frame(width: 260)
+                }
+            } footer: {
+                footer(L.chargeLimitFooter)
+            }
+            Section {
+                Toggle(L.heatProtection, isOn: $prefs.heatProtection)
+                Picker(L.heatThreshold, selection: $prefs.heatThreshold) {
+                    ForEach(Preferences.heatThresholds, id: \.self) { celsius in
+                        Text(Double(celsius).temperatureText).tag(celsius)
+                    }
+                }
+                .disabled(!prefs.heatProtection)
+            } footer: {
+                footer(helper.isReady ? L.heatFooter : [L.heatFooter, L.needsHelper].joined(separator: " "))
+            }
+            Section {
+                Toggle(L.restToggle, isOn: $prefs.restEnabled)
+                Picker(L.restLevel, selection: restDepthBinding) {
+                    ForEach(restDepths, id: \.self) { depth in
+                        Text((prefs.chargeLimit - depth).percentText).tag(depth)
+                    }
+                }
+                .disabled(!prefs.restEnabled || restDepths.isEmpty)
+            } footer: {
+                footer(helper.isReady ? L.restFooter : [L.restFooter, L.needsHelper].joined(separator: " "))
+            }
+            .disabled(prefs.chargeLimit >= Preferences.limitRange.upperBound)
+            if battery.hasMagSafeLight {
+                Section {
+                    Picker(L.magSafeLight, selection: $prefs.magSafeLight) {
+                        Text(L.lightAutomatic).tag(MagSafeLight.system)
+                        Text(L.lightOff).tag(MagSafeLight.off)
+                    }
+                    .disabled(!helper.isReady)
+                } footer: {
+                    footer(helper.isReady ? L.lightFooter : [L.lightFooter, L.needsHelper].joined(separator: " "))
+                }
+            }
             Section {
                 LabeledContent {
                     switch helper.status {
                     case .enabled:
-                        EmptyView()
+                        Button(L.helperRemove) { Task { await charge.removeHelper() } }
                     case .requiresApproval:
                         Button(L.helperApprove) { SMAppService.openSystemSettingsLoginItems() }
-                    default:
+                    case .notRegistered, .notFound:
                         Button(L.helperInstall) { helper.install() }
+                    @unknown default:
+                        EmptyView()
                     }
                 } label: {
                     Text(L.helperTitle)
-                    Text(helperStatus)
+                    Text(helper.installError ?? helperStatus)
                 }
             } footer: {
-                Text(L.helperFooter)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                footer(L.helperFooter)
             }
         }
         .formStyle(.grouped)
@@ -98,12 +186,42 @@ private struct GeneralPane: View {
         .onAppear { helper.refresh() }
     }
 
+    private var restDepths: Array<Int> {
+        Preferences.restDepths.filter { prefs.chargeLimit - $0 >= Preferences.limitRange.lowerBound }
+    }
+
+    private var restDepthBinding: Binding<Int> {
+        Binding {
+            min(prefs.restDepth, restDepths.last ?? prefs.restDepth)
+        } set: { depth in
+            prefs.restDepth = depth
+        }
+    }
+
+    private var limitBinding: Binding<Double> {
+        Binding {
+            draftLimit ?? Double(prefs.chargeLimit)
+        } set: { value in
+            draftLimit = value
+        }
+    }
+
+    private var limitText: String {
+        let limit = Int(draftLimit ?? Double(prefs.chargeLimit))
+        return limit >= Preferences.limitRange.upperBound ? L.chargeLimitOff : limit.percentText
+    }
+
     private var helperStatus: String {
         switch helper.status {
         case .enabled: L.helperEnabled
         case .requiresApproval: L.helperNeedsApproval
-        case .notFound: L.helperUnavailable
         default: L.helperNotInstalled
         }
+    }
+
+    private func footer(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -36,6 +36,12 @@ targets:
     platform: macOS
     sources:
       - path: Fullstop
+        excludes:
+          - Resources/AppIcon.icon
+          - Resources/AppIcon.icon/**
+      - path: Fullstop/Resources/AppIcon.icon
+        type: file
+        buildPhase: resources
       - path: Shared
       - path: LaunchDaemons/com.firatciftci.Fullstop.helper.plist
         buildPhase:
@@ -61,10 +67,15 @@ targets:
         NSHumanReadableCopyright: "© 2026 Firat Ciftci"
         SUFeedURL: https://github.com/firatciftci/fullstop/releases/latest/download/appcast.xml
         SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.firatciftci.Fullstop
+            CFBundleURLSchemes:
+              - fullstop
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.firatciftci.Fullstop
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
   FullstopHelper:
     type: tool

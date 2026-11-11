@@ -10,11 +10,13 @@ enum PowerUIError: Error {
 final class PowerUI {
     static let shared = PowerUI()
     static let limits = 80...100
+    static let steps = Set(stride(from: 80, through: 100, by: 5))
 
     private typealias Alloc = @convention(c) (AnyClass, Selector) -> Unmanaged<AnyObject>
     private typealias Initializer = @convention(c) (Unmanaged<AnyObject>, Selector, CFString) -> Unmanaged<AnyObject>?
     private typealias Count = @convention(c) (AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>) -> UInt64
     private typealias Action = @convention(c) (AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>) -> Bool
+    private typealias GetByte = @convention(c) (AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>) -> UInt8
     private typealias SetByte = @convention(c) (AnyObject, Selector, UInt8, AutoreleasingUnsafeMutablePointer<NSError?>) -> Bool
 
     private static let path = "/System/Library/PrivateFrameworks/PowerUI.framework/PowerUI"
@@ -26,17 +28,27 @@ final class PowerUI {
     }
 
     func isEnabled() throws -> Bool {
-        guard let (selector, function) = method("isMCLCurrentlyEnabled:", as: Count.self), let client else {
+        try flag("isMCLCurrentlyEnabled:")
+    }
+
+    func overrideOptimizedCharging() throws {
+        guard try flag("isSmartChargingCurrentlyEnabled:") else { return }
+        try perform("temporarilyEnableCharging:")
+    }
+
+    func limit() throws -> Int {
+        guard try isEnabled() else { return Self.limits.upperBound }
+        guard let (selector, function) = method("getMCLLimitWithError:", as: GetByte.self), let client else {
             throw PowerUIError.unavailable
         }
         var error: NSError?
         let value = function(client, selector, &error)
         if let error { throw PowerUIError.failed(error.localizedDescription) }
-        return value != 0
+        return Int(value)
     }
 
     func setLimit(_ value: Int) throws {
-        guard Self.limits.contains(value) else { throw PowerUIError.outOfRange(value) }
+        guard Self.steps.contains(value) else { throw PowerUIError.outOfRange(value) }
         if value < Self.limits.upperBound, try !isEnabled() {
             try perform("enableMCL:")
         }
@@ -47,6 +59,14 @@ final class PowerUI {
         guard function(client, selector, UInt8(value), &error) else {
             throw PowerUIError.failed(error?.localizedDescription ?? "")
         }
+    }
+
+    private func flag(_ name: String) throws -> Bool {
+        guard let (selector, function) = method(name, as: Count.self), let client else { throw PowerUIError.unavailable }
+        var error: NSError?
+        let value = function(client, selector, &error)
+        if let error { throw PowerUIError.failed(error.localizedDescription) }
+        return value != 0
     }
 
     private func perform(_ name: String) throws {
@@ -63,7 +83,9 @@ final class PowerUI {
     }
 
     private static func makeClient() -> AnyObject? {
-        guard dlopen(path, RTLD_NOW) != nil, let type = NSClassFromString("PowerUISmartChargeClient") else { return nil }
+        guard !DemoData.isEnabled, dlopen(path, RTLD_NOW) != nil, let type = NSClassFromString("PowerUISmartChargeClient") else {
+            return nil
+        }
         let allocSelector = NSSelectorFromString("alloc")
         let initSelector = NSSelectorFromString("initWithClientName:")
         guard let allocMethod = class_getClassMethod(type, allocSelector),

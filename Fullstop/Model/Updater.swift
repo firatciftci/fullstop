@@ -29,7 +29,7 @@ final class Updater: NSObject, SPUStandardUserDriverDelegate {
     override private init() {
         super.init()
         let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? ""
-        guard !key.isEmpty else { return }
+        guard !key.isEmpty, !DemoData.isEnabled else { return }
         let controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
         self.controller = controller
         observation = controller.updater.observe(\.canCheckForUpdates, options: [.initial]) { [weak self] _, _ in

@@ -16,6 +16,7 @@ cask "fullstop" do
             launchctl: "com.firatciftci.Fullstop.helper"
 
   zap trash: [
+    "~/Library/Application Support/Fullstop",
     "~/Library/Caches/com.firatciftci.Fullstop",
     "~/Library/HTTPStorages/com.firatciftci.Fullstop",
     "~/Library/Preferences/com.firatciftci.Fullstop.plist",

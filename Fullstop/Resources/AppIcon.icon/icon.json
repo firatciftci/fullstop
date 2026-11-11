@@ -1,0 +1,95 @@
+{
+  "fill": {
+    "automatic-gradient": "srgb:0.20392,0.78039,0.34902,1.00000"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "automatic-gradient": "srgb:0.20392,0.78039,0.34902,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "automatic-gradient": "srgb:0.07059,0.25098,0.13725,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "stop",
+      "layers": [
+        {
+          "name": "stop",
+          "image-name": "stop.svg",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.55
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      },
+      "specular": true
+    },
+    {
+      "name": "battery",
+      "layers": [
+        {
+          "name": "fill",
+          "image-name": "fill.svg",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.20392,0.78039,0.34902,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "name": "hatch",
+          "image-name": "hatch.svg",
+          "glass": false,
+          "opacity": 0.22
+        },
+        {
+          "name": "body",
+          "image-name": "body.svg",
+          "glass": true,
+          "opacity": 0.36
+        },
+        {
+          "name": "cap",
+          "image-name": "cap.svg",
+          "glass": true,
+          "opacity": 0.36
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.3
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      },
+      "specular": true
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

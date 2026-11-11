@@ -1,11 +1,11 @@
 import IOKit
 
-struct SMCError: Error, CustomStringConvertible {
+nonisolated struct SMCError: Error, CustomStringConvertible {
     let description: String
 }
 
-final class SMC {
-    private enum Offset {
+nonisolated final class SMC {
+    enum Offset {
         static let key = 0
         static let dataSize = 28
         static let result = 40
@@ -13,13 +13,14 @@ final class SMC {
         static let bytes = 48
     }
 
-    private enum Command: UInt8 {
+    enum Command: UInt8 {
+        case readBytes = 5
         case writeBytes = 6
         case readKeyInfo = 9
     }
 
     private static let structSize = 80
-    private static let maximumBytes = 32
+    static let maximumBytes = 32
     private static let selector: UInt32 = 2
 
     private let connection: io_connect_t
@@ -38,23 +39,12 @@ final class SMC {
         IOServiceClose(connection)
     }
 
-    func write(_ key: String, _ bytes: Array<UInt8>) throws {
-        let size = try keySize(key)
-        guard size == bytes.count, size <= Self.maximumBytes else {
-            throw SMCError(description: "\(key) takes \(size) bytes, not \(bytes.count)")
-        }
-        var input = Self.request(key, .writeBytes)
-        Self.put(UInt32(size), into: &input, at: Offset.dataSize)
-        input.replaceSubrange(Offset.bytes..<Offset.bytes + size, with: bytes)
-        _ = try call(input)
-    }
-
-    private func keySize(_ key: String) throws -> Int {
+    func keySize(_ key: String) throws -> Int {
         let output = try call(Self.request(key, .readKeyInfo))
         return Int(Self.get(output, at: Offset.dataSize))
     }
 
-    private func call(_ input: Array<UInt8>) throws -> Array<UInt8> {
+    func call(_ input: Array<UInt8>) throws -> Array<UInt8> {
         var output = Array(repeating: UInt8.zero, count: Self.structSize)
         var outputSize = Self.structSize
         let result = input.withUnsafeBytes { inBuffer in
@@ -68,7 +58,7 @@ final class SMC {
         return output
     }
 
-    private static func request(_ key: String, _ command: Command) -> Array<UInt8> {
+    static func request(_ key: String, _ command: Command) -> Array<UInt8> {
         var buffer = Array(repeating: UInt8.zero, count: structSize)
         var code: UInt32 = 0
         for byte in key.utf8 {
@@ -79,13 +69,13 @@ final class SMC {
         return buffer
     }
 
-    private static func put(_ value: UInt32, into buffer: inout Array<UInt8>, at offset: Int) {
+    static func put(_ value: UInt32, into buffer: inout Array<UInt8>, at offset: Int) {
         withUnsafeBytes(of: value.littleEndian) { bytes in
             buffer.replaceSubrange(offset..<offset + 4, with: bytes)
         }
     }
 
-    private static func get(_ buffer: Array<UInt8>, at offset: Int) -> UInt32 {
+    static func get(_ buffer: Array<UInt8>, at offset: Int) -> UInt32 {
         var value: UInt32 = 0
         for index in (0..<4).reversed() {
             value = value << 8 | UInt32(buffer[offset + index])

@@ -12,6 +12,15 @@ final class FullstopPanel: NSPanel {
     }
 }
 
+final class PanelHostingView<Content: View>: NSHostingView<Content> {
+    var onResize: (() -> Void)?
+
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        onResize?()
+    }
+}
+
 final class PanelController: NSObject {
     var onVisibilityChange: ((Bool) -> Void)?
 
@@ -22,6 +31,7 @@ final class PanelController: NSObject {
         backing: .buffered,
         defer: false
     )
+    private var host: NSView?
     private weak var anchor: NSStatusBarButton?
     private var outsideMonitor: Any?
 
@@ -51,10 +61,16 @@ final class PanelController: NSObject {
             .environment(ChargeController.shared)
             .environment(HelperClient.shared)
             .environment(Preferences.shared)
+            .environment(EnergySettings.shared)
             .frame(width: width)
-        let host = NSHostingView(rootView: root)
+        let host = PanelHostingView(rootView: root)
         host.sizingOptions = [.intrinsicContentSize]
+        host.onResize = { [weak self] in
+            guard let self, panel.isVisible else { return }
+            Task { @MainActor in self.position() }
+        }
         glass.contentView = host
+        self.host = host
         glass.wantsLayer = true
         glass.layer?.cornerRadius = glass.cornerRadius
         glass.layer?.cornerCurve = .continuous
@@ -74,6 +90,7 @@ final class PanelController: NSObject {
         if let button { anchor = button }
         BatteryMonitor.shared.refresh()
         HelperClient.shared.refresh()
+        EnergySettings.shared.refresh()
         position()
         let finalFrame = panel.frame
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -111,17 +128,18 @@ final class PanelController: NSObject {
 
     private func position() {
         guard let screen = anchor?.window?.screen ?? NSScreen.main ?? NSScreen.screens.first,
-            let content = panel.contentView
+            let host
         else { return }
-        let height = content.fittingSize.height
+        host.layoutSubtreeIfNeeded()
+        let height = host.fittingSize.height
         let visible = screen.visibleFrame
         var x = visible.midX - width / 2
         var top = visible.maxY - 1
-        if let anchor, let window = anchor.window {
-            let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-            let barBottom = visible.maxY < screen.frame.maxY ? visible.maxY : 2 * rect.midY - screen.frame.maxY
-            x = rect.midX - width / 2
-            top = barBottom - 1
+        if DemoData.isEnabled {
+            top = visible.midY + height / 2
+        } else if let placement = anchor?.menuBarPlacement {
+            x = placement.frame.midX - width / 2
+            top = placement.barBottom - 1
         }
         x = min(max(x, visible.minX + 8), visible.maxX - width - 8)
         panel.setFrame(NSRect(x: x, y: top - height, width: width, height: height), display: false)
@@ -137,5 +155,14 @@ final class PanelController: NSObject {
     private func removeMonitor() {
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }
         outsideMonitor = nil
+    }
+}
+
+extension NSView {
+    var menuBarPlacement: (frame: NSRect, barBottom: Double)? {
+        guard let window, let screen = window.screen else { return nil }
+        let frame = window.convertToScreen(convert(bounds, to: nil))
+        let visible = screen.visibleFrame
+        return (frame, visible.maxY < screen.frame.maxY ? visible.maxY : 2 * frame.midY - screen.frame.maxY)
     }
 }

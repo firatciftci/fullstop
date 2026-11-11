@@ -1,4 +1,5 @@
 import Dispatch
+import Synchronization
 import XPC
 
 func handle(_ request: HelperRequest) -> HelperReply {
@@ -12,6 +13,8 @@ func handle(_ request: HelperRequest) -> HelperReply {
             try Hardware.setLight(light)
         case let .setTopOffLimit(limit):
             try TopOff.apply(limit: limit)
+        case let .setEnergyMode(mode, onBattery):
+            try Energy.apply(mode, onBattery: onBattery)
         }
         return HelperReply()
     } catch {
@@ -19,7 +22,10 @@ func handle(_ request: HelperRequest) -> HelperReply {
     }
 }
 
+let clients = Mutex(0)
+
 atexit { Hardware.restoreAdapter() }
+SleepWatcher.start()
 
 let signals = [SIGTERM, SIGINT, SIGHUP].map { signal in
     Darwin.signal(signal, SIG_IGN)
@@ -33,10 +39,16 @@ let listener = try XPCListener(
     service: HelperService.label,
     requirement: .isFromSameTeam(andMatchesSigningIdentifier: HelperService.appIdentifier)
 ) { request in
-    request.accept { (message: HelperRequest) -> (any Encodable)? in
+    clients.withLock { $0 += 1 }
+    return request.accept { (message: HelperRequest) -> (any Encodable)? in
         handle(message)
     } cancellationHandler: { _ in
         Hardware.restoreAdapter()
+        let remaining = clients.withLock { count in
+            count -= 1
+            return count
+        }
+        if remaining == 0 { exit(0) }
     }
 }
 

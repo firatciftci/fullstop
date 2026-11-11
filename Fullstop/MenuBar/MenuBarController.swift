@@ -32,22 +32,24 @@ final class MenuBarController: NSObject {
 
     private func refresh() {
         let state = BatteryMonitor.shared.state
+        let charge = ChargeController.shared
+        let prefs = Preferences.shared
         guard let button = item.button else { return }
-        let symbol = state.isCharging ? "battery.100percent.bolt" : "battery.\(Self.bucket(state.percent))percent"
-        let percent = (Double(state.percent) / 100).formatted(.percent)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: percent)
-        button.setAccessibilityLabel(percent)
-        button.toolTip = percent
-    }
-
-    private static func bucket(_ percent: Int) -> Int {
-        switch percent {
-        case ..<13: 0
-        case ..<38: 25
-        case ..<63: 50
-        case ..<88: 75
-        default: 100
+        let status = charge.status
+        let label = [state.percent.percentText, status.text].joined(separator: ", ")
+        let image = BatteryGlyph.styled(percent: state.percent, limit: charge.displayLimit, status: status, label: label)
+        button.image = image
+        if prefs.showPercentage, !prefs.percentInside {
+            button.imagePosition = image == nil ? .noImage : .imageTrailing
+            button.attributedTitle = NSAttributedString(
+                string: state.percent.percentText + (image == nil ? "" : " "),
+                attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)])
+        } else {
+            button.imagePosition = .imageOnly
+            button.title = ""
         }
+        button.setAccessibilityLabel(label)
+        button.toolTip = label
     }
 
     @objc private func clicked(_ sender: NSStatusBarButton) {
@@ -69,20 +71,36 @@ final class MenuBarController: NSObject {
 
     private func utilityMenu() -> NSMenu {
         let menu = NSMenu()
-        let about = menu.addItem(withTitle: L.about, action: #selector(openAbout), keyEquivalent: "")
-        about.target = self
+        menu.addItem(action(L.about, #selector(openAbout), symbol: "info.circle"))
         menu.addItem(.separator())
-        let settings = menu.addItem(withTitle: L.settingsMenu, action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
+        menu.addItem(action(L.settingsMenu, #selector(openSettings), symbol: "gearshape", key: ","))
+        if Updater.shared.isAvailable {
+            let update = NSMenuItem(title: L.checkForUpdatesMenu, action: #selector(Updater.checkForUpdates(_:)), keyEquivalent: "")
+            update.target = Updater.shared
+            update.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
+            menu.addItem(update)
+        }
         menu.addItem(.separator())
-        menu.addItem(withTitle: L.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: L.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        menu.addItem(quit)
+        for entry in menu.items {
+            entry.preferredImageVisibility = .visible
+        }
         return menu
     }
 
+    private func action(_ title: String, _ selector: Selector, symbol: String, key: String = "") -> NSMenuItem {
+        let entry = NSMenuItem(title: title, action: selector, keyEquivalent: key)
+        entry.target = self
+        entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        return entry
+    }
+
     private func popUp(_ menu: NSMenu, from button: NSStatusBarButton) {
-        item.menu = menu
-        button.performClick(nil)
-        item.menu = nil
+        guard let placement = button.menuBarPlacement else { return }
+        button.highlight(true)
+        menu.popUp(positioning: nil, at: NSPoint(x: placement.frame.minX - 5, y: placement.barBottom - 6), in: nil)
         button.highlight(panel.isVisible)
     }
 }
